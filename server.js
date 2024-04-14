@@ -276,25 +276,33 @@ app.get('/generate-excel-report', async (req, res) => {
 
 
 app.get('/generate-pdf-report', async (req, res) => {
-    const { username } = req.query; // Extract username from query parameters
+    const { username } = req.query;
     const user = users[username];
     if (!user) {
         return res.status(400).send('User not found');
     }
+
     try {
-        // Fetch attendance data from the MongoDB collection based on the logged-in user's collection
         const Attendance = mongoose.model('Attendance', attendanceSchema, user.collection);
         const attendanceData = await Attendance.find({});
 
-        // Create a new PDF document
-        const doc = new PDFDocument();
+        // Sort attendance data by date
+        attendanceData.sort((a, b) => a.time - b.time);
 
-        // Pipe the PDF document to the response
+        const doc = new PDFDocument();
         doc.pipe(res);
 
-        // Add content to the PDF document
-        doc.fontSize(14).text('NFC Attendance Report', { align: 'center' }).moveDown();
+        let currentDate = null;
+
         attendanceData.forEach(data => {
+            if (currentDate !== data.time.toDateString()) {
+                if (currentDate) {
+                    doc.addPage();
+                }
+                currentDate = data.time.toDateString();
+                doc.fontSize(14).text(`Date: ${currentDate}`, { align: 'center' }).moveDown();
+            }
+
             doc.text(`Serial Number: ${mapSerialToStudentName(data.serialNumber)}`);
             doc.text(`Log Data: ${data.logData}`);
             doc.text(`Time: ${data.time.toString()}`);
@@ -303,7 +311,6 @@ app.get('/generate-pdf-report', async (req, res) => {
             doc.moveDown();
         });
 
-        // Finalize the PDF document
         doc.end();
     } catch (error) {
         console.error('Error generating PDF report:', error);
